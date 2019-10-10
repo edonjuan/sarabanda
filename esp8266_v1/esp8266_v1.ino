@@ -2,6 +2,20 @@
 // NOTE: ESP8266 Library version 2.5.0
 // Author: git@edonjuan
 
+// Connection libraries
+#include <ESP8266WiFi.h>
+#include <PubSubClient.h>
+
+// Update these with values suitable for your network.
+const char* ssid = "Intel-IoT";
+const char* password = "1N73RN37D3L45C0545";
+const char* mqtt_server = "edonjuan.duckdns.org";
+const char* mqtt_user = "mqtt_user";
+const char* mqtt_pass = "mqtt_pass";
+
+WiFiClient espClient;
+PubSubClient client(espClient);
+
 // DHT file & Configuration
 #include "DHT.h"
 #define DHTPIN 10 
@@ -21,6 +35,9 @@ HX711 scale;
 
 // Functions definitions
 void setup_loadcell(void);
+void setup_wifi(void);
+void callback(char* topic, byte* payload, unsigned int length);
+void reconnect(void);
 
 // Variables definitions
 int pir_counter=0;
@@ -37,6 +54,7 @@ void setup() {
   Serial.println("Sarabandav1");
   
   pinMode(LED, OUTPUT);
+  digitalWrite(LED, !LOW);
   pinMode(DHTPIN, INPUT_PULLUP);
   
   pinMode(PIR, INPUT);
@@ -44,17 +62,27 @@ void setup() {
 
   dht.begin(); 
   setup_loadcell();
+  setup_wifi();
+
+  client.setClient(espClient);
+  client.setServer(mqtt_server, 1883);
+
+  // Function to call (Data incoming)
+  client.setCallback(callback);
+  
   Serial.print("\n\n\n****Start****\n");
 }
 
 // Main
 void loop() {
 
+   if (!client.connected()) {
+    reconnect();
+  }
+  client.loop();  
+
   // Rate
   delay(5000);
-
-  // Heartbeat
-  digitalWrite(LED, !HIGH);
 
   // DHT11 sensor
   float h = dht.readHumidity();
@@ -86,12 +114,20 @@ void loop() {
   //Serial.print("one reading:\t");
   //Serial.print(scale.get_units(), 1);
   Serial.print("scale_ch_A: \t");
-  Serial.println(scale.get_units(10), 1);
+  float scale_a = scale.get_units(10);
+  
+  Serial.println(scale_a, 2);
 
   scale.power_down();    
   Serial.print("\n\n");
-  digitalWrite(LED, !LOW); 
-          
+
+  // Send data to HASS
+  sendmqtt("egi/humidity", h);
+  sendmqtt("egi/temperature", t);
+  sendmqtt("egi/pir", pir_counter);
+  sendmqtt("egi/ldr", ldr_value);
+  sendmqtt("egi/scale_a", scale_a);
+  sendmqtt("egi/scale_b", 5);          
 }
 
 void setup_loadcell(void)
@@ -142,3 +178,76 @@ void setup_loadcell(void)
   Serial.println("Readings:");  
 }
 
+void setup_wifi() {  
+ 
+  // We start by connecting to a WiFi network
+  Serial.println();
+  Serial.println();
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
+ 
+  WiFi.begin(ssid, password);
+ 
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+ 
+  Serial.println("");
+  Serial.println("WiFi connected");  
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+}
+
+void callback(char* topic, byte* payload, unsigned int length) {
+
+  String strMessage;
+  String strTopic;
+  String strPayload;
+ 
+  payload[length] = '\0';
+  strTopic = String((char*)topic);
+  strMessage = String((char*)payload);
+  //Serial.println(strTopic);
+  //Serial.println(strMessage);
+}
+
+void sendmqtt(char* topic, float data)
+{
+  String data_str;
+  char data_chr[50];
+  int data_int;
+
+  data_int = (int)data;
+  if(data_int == data)
+  {
+    data_str = String(data_int);
+  }
+  else
+  {
+    data_str = String(data);
+  }
+  data_str.toCharArray(data_chr, data_str.length() + 1);
+  client.publish(topic, data_chr);  
+}
+ 
+void reconnect() {
+  // Loop until we're reconnected
+  while (!client.connected()) {
+    Serial.print("Attempting MQTT connection...");
+    // Attempt to connect
+    if (client.connect("egiProject", mqtt_user, mqtt_pass)) {
+      Serial.println("connected");
+      digitalWrite(LED, !HIGH);
+      // Once connected, publish an announcement...
+      client.subscribe("egi/ctrl");
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again in 5 seconds");
+      digitalWrite(LED, !LOW);
+      // Wait 5 seconds before retrying
+      delay(5000);
+    }
+  }
+}
