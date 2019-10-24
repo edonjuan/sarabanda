@@ -18,7 +18,7 @@ PubSubClient client(espClient);
 
 // DHT file & Configuration
 #include "DHT.h"
-#define DHTPIN 10 
+#define DHTPIN 13 
 #define DHTTYPE DHT11   
 DHT dht(DHTPIN, DHTTYPE);
 
@@ -26,7 +26,8 @@ DHT dht(DHTPIN, DHTTYPE);
 #include "HX711.h"
 #define LOADCELL_DOUT_PIN 14
 #define LOADCELL_SCK_PIN 12
-HX711 scale;
+HX711 scale_a;
+HX711 scale_b;
 
 // NodeMCU ports
 #define LED 16
@@ -79,7 +80,7 @@ void loop() {
    if (!client.connected()) {
     reconnect();
   }
-  client.loop();  
+  client.loop(); 
 
   // Rate
   delay(5000);
@@ -109,16 +110,21 @@ void loop() {
   Serial.print("LDR Value: \t");
   Serial.println(ldr_value);
 
-  //scale.set_gain(64);
-  scale.power_up();
-  //Serial.print("one reading:\t");
-  //Serial.print(scale.get_units(), 1);
-  Serial.print("scale_ch_A: \t");
-  float scale_a = scale.get_units(10);
-  
-  Serial.println(scale_a, 2);
+  // SCALE_channelA&B
+  scale_a.get_units(1);
+  Serial.print("Scale_A: \t");
+  int gr_a = scale_a.get_units(10);
+  Serial.print(gr_a);
+  Serial.print(" gr");
 
-  scale.power_down();    
+  scale_b.get_units(1);
+  Serial.print("\t Scale_B: \t");
+  int gr_b = scale_b.get_units(10);
+  Serial.print(gr_b);
+  Serial.println(" gr");
+
+
+   
   Serial.print("\n\n");
 
   // Send data to HASS
@@ -126,56 +132,24 @@ void loop() {
   sendmqtt("egi/temperature", t);
   sendmqtt("egi/pir", pir_counter);
   sendmqtt("egi/ldr", ldr_value);
-  sendmqtt("egi/scale_a", scale_a);
-  sendmqtt("egi/scale_b", 5);          
+  sendmqtt("egi/scale_a", gr_a);
+  sendmqtt("egi/scale_b", gr_b);    
+  pir_counter = 0;  
 }
 
 void setup_loadcell(void)
 {
-    // Initialize library with data output pin, clock input pin and gain factor.
-  // Channel selection is made by passing the appropriate gain:
-  // - With a gain factor of 64 or 128, channel A is selected
-  // - With a gain factor of 32, channel B is selected
-  // By omitting the gain factor parameter, the library
-  // default "128" (Channel A) is used here.
-  
-  scale.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
-  //scale.set_gain(64);
-  
+  scale_a.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
+  scale_a.set_gain(128);
+  scale_a.set_scale(889);
+  scale_a.tare();
 
-  Serial.println("Before setting up the scale:");
-  Serial.print("read: \t\t");
-  Serial.println(scale.read());      // print a raw reading from the ADC
+  delay(1000);
 
-  Serial.print("read average: \t\t");
-  Serial.println(scale.read_average(20));   // print the average of 20 readings from the ADC
-
-  Serial.print("get value: \t\t");
-  Serial.println(scale.get_value(5));   // print the average of 5 readings from the ADC minus the tare weight (not set yet)
-
-  Serial.print("get units: \t\t");
-  Serial.println(scale.get_units(5), 1);  // print the average of 5 readings from the ADC minus tare weight (not set) divided
-            // by the SCALE parameter (not set yet)
-
-  scale.set_scale(2280.f);                      // this value is obtained by calibrating the scale with known weights; see the README for details
-  scale.tare();               // reset the scale to 0
-
-  Serial.println("After setting up the scale:");
-
-  Serial.print("read: \t\t");
-  Serial.println(scale.read());                 // print a raw reading from the ADC
-
-  Serial.print("read average: \t\t");
-  Serial.println(scale.read_average(20));       // print the average of 20 readings from the ADC
-
-  Serial.print("get value: \t\t");
-  Serial.println(scale.get_value(5));   // print the average of 5 readings from the ADC minus the tare weight, set with tare()
-
-  Serial.print("get units: \t\t");
-  Serial.println(scale.get_units(5), 1);        // print the average of 5 readings from the ADC minus tare weight, divided
-            // by the SCALE parameter set with set_scale
-
-  Serial.println("Readings:");  
+  scale_b.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
+  scale_b.set_gain(32);
+  scale_b.set_scale(508);
+  scale_b.tare();
 }
 
 void setup_wifi() {  
