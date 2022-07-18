@@ -34,7 +34,6 @@ painlessMesh  mesh;
 // Functions structure
 //void set_tare();
 void sendMessage(); // Prototype so PlatformIO doesn't compla
-void IRAM_ATTR set_tare();
 void IRAM_ATTR pir_action();
 
 // Task declaration
