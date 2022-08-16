@@ -1,5 +1,5 @@
 ﻿/* MESH_Slave
- *  Sensor: Temperature / Humidity (DTH11/22
+ *  Sensor: Temperature / Humidity (DTH11/22)
  *  PIR, LDR (Analog)
  *  Watchdog for Master
 */
